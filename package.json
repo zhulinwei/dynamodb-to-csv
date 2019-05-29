@@ -1,0 +1,28 @@
+{
+  "name": "dynamodb-to-csv",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zhulinwei/dynamodb-to-csv.git"
+  },
+  "author": "Level.Z",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/zhulinwei/dynamodb-to-csv/issues"
+  },
+  "homepage": "https://github.com/zhulinwei/dynamodb-to-csv#readme",
+  "dependencies": {
+    "aws-sdk": "^2.463.0",
+    "commander": "^2.20.0",
+    "debug": "^4.1.1",
+    "papaparse": "^4.6.3"
+  },
+  "devDependencies": {
+    "debug": "^4.1.1"
+  }
+}
