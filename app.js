@@ -1,5 +1,5 @@
-const path = require('path');
 const _ = require('lodash');
+const path = require('path');
 const AWS = require('aws-sdk');
 const program = require('commander');
 const csvWriter = require('csv-writer');
@@ -155,5 +155,3 @@ class Task {
 const task = new Task();
 task.init();
 task.execute();
-
-module.exports = new Task();
