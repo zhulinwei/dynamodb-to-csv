@@ -4,21 +4,12 @@ const AWS = require('aws-sdk');
 const program = require('commander');
 const csvWriter = require('csv-writer');
 
-const SCAN_LIMIT = 1000;
-// 一万数据量
+const SCAN_LIMIT = 1;
 const TEN_THOUSAND = 10000;
-// 五万数据量
-// const FIFTY_THOUSAND = 50000;
-// 十万数据量
-// const ONE_HUNDRED_THOUSAND = 100000;
-// 一百万数据量
-// const ONE_MILLION = 1000000;
 
-// const createCsvWriter = require('csv-writer').createObjectCsvWriter;
+function isObject (value) { return value !== null && typeof value === 'object'; }
 
-// const converter = AWS.DynamoDB.Converter;
-
-// function isObject (value) { return value !== null && typeof value === 'object'; }
+function changeToObject (value) { return AWS.DynamoDB.Converter.unmarshall(value); }
 
 class DynamoDB {
   constructor (config = {}) {
@@ -33,29 +24,6 @@ class DynamoDB {
     this.dynamodb = new AWS.DynamoDB();
   }
 
-  // _cannotFoundFiled (field) { return this.fieldsOfItem.indexOf(field) < 0; }
-
-  // formatItems (items = []) {
-  //   if (items.length < 1) return;
-  //   let fieldsOfItem = [];
-  //   let valuesOfItem = [];
-
-  //   for (let item of items) {
-  //     let row = {};
-  //     let itemOfJsObject = converter.unmarshall(item);
-  //     Object.keys(itemOfJsObject).forEach(field => {
-  //       // csv属性
-  //       if (!fieldsOfItem.includes(field)) fieldsOfItem.push(field.trim());
-  //       // csv内容
-  //       if (!isObject) row[field] = itemOfJsObject[field];
-  //       else row[field] = JSON.stringify(itemOfJsObject[field]);
-  //     });
-  //     valuesOfItem.push(row);
-  //   }
-
-  //   return { fields: fieldsOfItem, values: valuesOfItem };
-  // }
-
   async describeTable (query) {
     try {
       const result = await this.dynamodb.describeTable(query).promise();
@@ -69,12 +37,6 @@ class DynamoDB {
     try {
       const result = await this.dynamodb.scan(query).promise();
       return result;
-      // this._keepItems(result.Items);
-      // if (result.LastEvaluatedKey) {
-      //   let nextQuery = Object.assign({}, query, { ExclusiveStartKey: result.LastEvaluatedKey });
-      //   return this.scanDynamoDB(nextQuery);
-      // }
-      // return { fields: this.fieldsOfItem, values: this.valuesOfItem };
     } catch (error) {
       console.dir(error);
     }
@@ -85,9 +47,8 @@ class Task {
   constructor () {
     this.command = {};
     this.dynamodb = {};
+    this.itemCount = 0;
     this.csvWriter = {};
-    // this.csvFields = [];
-    // this.csvValues = [];
   }
 
   _parseCommand () {
@@ -109,27 +70,24 @@ class Task {
     if (!this.command.tableName) throw new Error('数据表名称必须设置');
   }
 
-  // async saveCsv (fields = [], values = []) {
-  //   const outputPath = path.join(__dirname, this.command.output);
-  //   if (Object.keys(this.csvWriter).length < 1) {
-  //     this.csvWriter = createCsvWriter({
-  //       path: outputPath,
-  //       header: [
-  //         { id: 'uid', title: 'uid' },
-  //         { id: 'bid', title: 'bid' },
-  //         { id: 'cid', title: 'cid' }
-  //       ]
-  //     });
-  //   }
-  //   await this.csvWriter.writeRecords(values);
-  //   // let outputValue;
-  //   // if (a) outputValue = csv.unparse({ fields: fields, data: values });
-  //   // else outputValue = csv.unparse({ data: values });
-  //   // console.log(outputValue);
-  //   // const outputValue = csv.unparse({ fields: fields, data: values });
-  //   // const outputValue = csv.unparse({ data: values });
-  //   // fs.appendFileSync(outputPath, outputValue);
-  // }
+  async _getCsvFields (itemCount) {
+    let csvFields = [];
+    if (itemCount < TEN_THOUSAND) {
+      let result = {};
+      let scanCount = 0;
+      let scanOption = { TableName: this.command.tableName, Limit: SCAN_LIMIT };
+      do {
+        result = await this.dynamodb.scanTable(scanOption);
+        const fields = result.Items.map(item => Object.keys(item)).reduce((accumulator, currentValue) => _.union(accumulator, currentValue), []);
+        csvFields = _.union(csvFields, fields);
+        if (result.LastEvaluatedKey) {
+          scanCount += SCAN_LIMIT;
+          scanOption.ExclusiveStartKey = result.LastEvaluatedKey;
+        }
+      } while (result.LastEvaluatedKey && scanCount < TEN_THOUSAND);
+    }
+    return csvFields;
+  }
 
   async init () {
     try {
@@ -142,110 +100,58 @@ class Task {
     }
   }
 
-  async getCsvFields (itemCount) {
-    let csvFields = [];
-    if (itemCount < TEN_THOUSAND) {
-      let result = {};
-      let scanCount = 0;
-      let scanOption = { TableName: this.command.tableName, Limit: SCAN_LIMIT };
-      do {
-        result = await this.dynamodb.scanTable(scanOption);
-        const fields = result.Items.map(item => Object.keys(item)).reduce((accumulator, currentValue) => _.union(accumulator, currentValue));
-        csvFields = _.union(csvFields, fields);
-        if (result.LastEvaluatedKey) {
-          scanCount += SCAN_LIMIT;
-          scanOption.ExclusiveStartKey = result.LastEvaluatedKey;
-        }
-      } while (result.LastEvaluatedKey && scanCount < TEN_THOUSAND);
-    }
-    return csvFields;
+  async check () {
+    const tableName = this.command.tableName;
+    const tableDesc = await this.dynamodb.describeTable({ TableName: tableName });
+    if (!tableDesc) throw new Error(`数据表${tableName}不存在`);
+    const itemCount = tableDesc.Table.ItemCount;
+    if (itemCount < 1) throw new Error(`数据表${tableName}不存在数据`);
+    console.log(`数据表${tableName}共包含${itemCount}条数据`);
+    this.itemCount = itemCount;
   }
 
-  createCsvWriter (output, csvFields) {
+  async initCsv () {
+    const tableName = this.command.tableName;
+    const csvFields = await this._getCsvFields(this.itemCount);
+    console.log(`数据表${tableName}列名包括：${csvFields.join(', ')}`);
+    const output = path.join(__dirname, this.command.output);
     this.csvWriter = csvWriter.createObjectCsvWriter({
       path: output,
       header: csvFields.map(field => { return { id: field, title: field }; })
     });
   }
 
-  // async getCsvValues (scanOption) {
-
-  //   do {
-  //     result = await this.dynamodb.scanTable(scanOption);
-  //     const fields = result.Items.map(item => Object.keys(item)).reduce((accumulator, currentValue) => _.union(accumulator, currentValue));
-  //     if (result.LastEvaluatedKey) {
-  //       scanCount += SCAN_LIMIT;
-  //       scanOption.ExclusiveStartKey = result.LastEvaluatedKey;
-  //     }
-  //   } while (result.LastEvaluatedKey);
-  // }
-
-  async saveCsvValues () {
+  async saveCsv () {
     let result = {};
+    let scanCount = 0;
     let scanOption = { TableName: this.command.tableName, Limit: SCAN_LIMIT };
     do {
-      let items = [];
+      console.log(`正在处理第${scanCount}条数据`);
       result = await this.dynamodb.scanTable(scanOption) || {};
-      result.Items.map(item => {
-        let itemOfJsObject = AWS.DynamoDB.Converter.unmarshall(item);
-        console.log(item);
-        console.log(itemOfJsObject);
-        console.log('------------');
-        // Object.keys(itemOfJsObject).map(field => {
-        //   if (!isObject) row[field] = itemOfJsObject[field];
-        //   else row[field] = JSON.stringify(itemOfJsObject[field]);
-        // });
-        // valuesOfItem.push(row);
+      const items = result.Items.map(dynamodbItem => {
+        let objectItem = changeToObject(dynamodbItem);
+        for (let key in objectItem) {
+          if (isObject(objectItem[key])) objectItem[key] = JSON.stringify(objectItem[key]);
+        }
+        return objectItem;
       });
-      console.log(result.Items);
+      if (items.length > 0) await this.csvWriter.writeRecords(items);
       if (result.LastEvaluatedKey) scanOption.ExclusiveStartKey = result.LastEvaluatedKey;
-      // if (result.Items && result.Items.length > 0) await this.csvWriter.writeRecords(result.Items);
+      scanCount += SCAN_LIMIT;
     } while (result.LastEvaluatedKey);
+    console.log('处理完成');
   }
 
   async execute () {
     try {
-      const tableName = this.command.tableName;
-      const tableDesc = await this.dynamodb.describeTable({ TableName: tableName });
-      if (!tableDesc) throw new Error(`数据表${tableName}不存在`);
-      const itemCount = tableDesc.Table.ItemCount;
-      if (itemCount < 1) throw new Error(`数据表${tableName}不存在数据`);
-      console.log(`数据表${tableName}共包含${itemCount}条数据`);
-      console.log(`正在统计数据表${tableName}列名`);
-      const csvFields = await this.getCsvFields(itemCount);
-      console.log(`数据表${tableName}列名包括：${csvFields.join(', ')}`);
-      const output = path.join(__dirname, this.command.output);
-      this.createCsvWriter(output, csvFields);
-      await this.saveCsvValues();
+      await this.check();
+      await this.initCsv();
+      await this.saveCsv();
     } catch (error) {
       console.log('出现错误');
       console.log(error);
     }
-
-    // const itemCount = tableDesc.table.ItemCount;
-    // console.log(`数据表${tableName}共包含${itemCount}条数据`);
-    // console.log(`------正在统计数据表${tableName}列名------`);
-    // this.getCsvFields(itemCount);
   }
-
-  // async execute (query = { TableName: 'tony-test', Limit: 1 }) {
-  //   try {
-  //     const result = await this.dynamodb.scanDynamoDB(query);
-
-  //     if (result.Items.length < 1) return;
-  //     const { fields, values } = this.dynamodb.formatItems(result.Items);
-  //     await this.saveCsv(fields, values, true);
-
-  //     if (!result.LastEvaluatedKey) {
-  //       console.log('爬取完成');
-  //     } else {
-  //       let nextQuery = Object.assign({}, query, { ExclusiveStartKey: result.LastEvaluatedKey });
-  //       return this.execute(nextQuery);
-  //     }
-  //   } catch (error) {
-  //     console.dir(error);
-  //   }
-  // }
 }
 
 const task = new Task();
