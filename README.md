@@ -30,7 +30,7 @@ Options:
 
 ## example
 ``` shell
-node app -r us-west-2 -f test.csv
+node app -r us-west-2 -t test -f test.csv
 node app -r us-west-2 -a your_access_key_id -k your_secret_access_key -e your_dynamodb_endpoint -t your_dynamedb_table_name -f your_output_file_name
 ```
 
