@@ -71,21 +71,19 @@ class Task {
   }
 
   async _getCsvFields (itemCount) {
+    let result = {};
+    let scanCount = 0;
     let csvFields = [];
-    if (itemCount < TEN_THOUSAND) {
-      let result = {};
-      let scanCount = 0;
-      let scanOption = { TableName: this.command.tableName, Limit: SCAN_LIMIT };
-      do {
-        result = await this.dynamodb.scanTable(scanOption);
-        const fields = result.Items.map(item => Object.keys(item)).reduce((accumulator, currentValue) => _.union(accumulator, currentValue), []);
-        csvFields = _.union(csvFields, fields);
-        if (result.LastEvaluatedKey) {
-          scanCount += SCAN_LIMIT;
-          scanOption.ExclusiveStartKey = result.LastEvaluatedKey;
-        }
-      } while (result.LastEvaluatedKey && scanCount < TEN_THOUSAND);
-    }
+    let scanOption = { TableName: this.command.tableName, Limit: SCAN_LIMIT };
+    do {
+      result = await this.dynamodb.scanTable(scanOption);
+      const fields = result.Items.map(item => Object.keys(item)).reduce((accumulator, currentValue) => _.union(accumulator, currentValue), []);
+      csvFields = _.union(csvFields, fields);
+      if (result.LastEvaluatedKey) {
+        scanCount += SCAN_LIMIT;
+        scanOption.ExclusiveStartKey = result.LastEvaluatedKey;
+      }
+    } while (result.LastEvaluatedKey && scanCount < TEN_THOUSAND);
     return csvFields;
   }
 
