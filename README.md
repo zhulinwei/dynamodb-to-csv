@@ -25,8 +25,8 @@ Options:
 ## 依赖
 - lodadh
 - aws-sdk
-- commander
 - csv-writer
+- commander
 
 ## example
 ``` shell
