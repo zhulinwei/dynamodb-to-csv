@@ -4,7 +4,7 @@ const AWS = require('aws-sdk');
 const program = require('commander');
 const csvWriter = require('csv-writer');
 
-const SCAN_LIMIT = 1;
+const SCAN_LIMIT = 1000;
 const TEN_THOUSAND = 10000;
 
 function isObject (value) { return value !== null && typeof value === 'object'; }
