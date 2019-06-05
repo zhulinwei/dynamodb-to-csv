@@ -29,9 +29,13 @@ Options:
 - commander
 
 ## example
+
+将放在美西2区的数据表test导出到test.csv文件中
 ``` shell
 node app -r us-west-2 -t test -f test.csv
-node app -r us-west-2 -a your_access_key_id -k your_secret_access_key -e your_dynamodb_endpoint -t your_dynamedb_table_name -f your_output_file_name
 ```
 
-
+将放在美西2区、编号为your_access_key_id、密钥为your_secret_access_key、端口地址为your_dynamodb_endpoint、数据表为your_dynamedb_table_name的数据导入到your_output_file_name文件中
+``` shell
+node app -r us-west-2 -a your_access_key_id -k your_secret_access_key -e your_dynamodb_endpoint -t your_dynamedb_table_name -f your_output_file_name
+```
